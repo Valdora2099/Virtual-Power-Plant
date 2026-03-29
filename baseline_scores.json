@@ -1,0 +1,26 @@
+{
+  "easy-arbitrage": {
+    "score": 0.0237,
+    "total_reward": 5.9375,
+    "steps": 48,
+    "profit_usd": 5.9375,
+    "safety_violations": 0,
+    "model": "llama-3.1-8b-instant"
+  },
+  "medium-forecast-error": {
+    "score": 0.0978,
+    "total_reward": 9.7791,
+    "steps": 48,
+    "profit_usd": 9.7791,
+    "safety_violations": 0,
+    "model": "llama-3.1-8b-instant"
+  },
+  "hard-frequency-response": {
+    "score": 0.1145,
+    "total_reward": 143.9341,
+    "steps": 48,
+    "profit_usd": 223.9341,
+    "safety_violations": 40,
+    "model": "llama-3.1-8b-instant"
+  }
+}
