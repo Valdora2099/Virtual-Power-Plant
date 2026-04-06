@@ -46,18 +46,21 @@ MAX_STEPS = 48
 client: Optional[OpenAI] = None
 DEFAULT_MODEL: str = ""
 USE_LLM = False  # Will be set to True if a working API key is found
+CLIENT_TYPE: str = ""  # Track which provider: "openai", "groq", "huggingface", or ""
 
 # Try OpenAI first
 if OPENAI_API_KEY:
     client = OpenAI(api_key=OPENAI_API_KEY, max_retries=0)
     DEFAULT_MODEL = MODEL_NAME_ENV or "gpt-4o-mini"
     USE_LLM = True
+    CLIENT_TYPE = "openai"
     print(f"[INFO] Using OpenAI with model: {DEFAULT_MODEL}", file=sys.stderr)
 # Then Groq
 elif GROQ_API_KEY:
     client = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1", max_retries=0)
     DEFAULT_MODEL = MODEL_NAME_ENV or "llama-3.1-8b-instant"
     USE_LLM = True
+    CLIENT_TYPE = "groq"
     print(f"[INFO] Using Groq with model: {DEFAULT_MODEL}", file=sys.stderr)
 # Finally Hugging Face Router
 elif HF_TOKEN:
@@ -65,9 +68,11 @@ elif HF_TOKEN:
     client = OpenAI(api_key=HF_TOKEN, base_url=base, max_retries=0)
     DEFAULT_MODEL = MODEL_NAME_ENV or "Qwen/Qwen2.5-72B-Instruct"
     USE_LLM = True
+    CLIENT_TYPE = "huggingface"
     print(f"[INFO] Using Hugging Face Router with model: {DEFAULT_MODEL}", file=sys.stderr)
 else:
     USE_LLM = False
+    CLIENT_TYPE = ""
     DEFAULT_MODEL = "rule-based-smart-agent-v2"
     print("[WARNING] No API key found. Falling back to rule-based agent.", file=sys.stderr)
 
@@ -229,48 +234,129 @@ def _rule_agent(obs: dict, task_id: str = "") -> Dict[str, Any]:
 
 
 def get_llm_action(obs: dict, task_id: str) -> Dict[str, Any]:
-    """Call LLM with retries and fallback to rule agent."""
+    """Call LLM with provider-specific handling and fallback to rule agent."""
     if not USE_LLM or client is None:
         return _rule_agent(obs, task_id)
 
     summary = _summarise_obs(obs)
-    prompt  = ACTION_PROMPT.format(task_id=task_id, **summary)
+    prompt = ACTION_PROMPT.format(task_id=task_id, **summary)
 
-    max_attempts = 4
-    for attempt in range(max_attempts):
-        try:
-            time.sleep(1.0)   # Basic rate limit pacing
-            response = client.chat.completions.create(
-                model=DEFAULT_MODEL,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user",   "content": prompt},
-                ],
-                temperature=0.1,
-                max_tokens=120,
-            )
-            text = response.choices[0].message.content.strip()
-            decision = _extract_json(text)
-            return {
-                "global_charge_rate": float(max(-1.0, min(1.0, decision.get("global_charge_rate", 0.0)))),
-                "min_reserve_pct":    float(max(0.0, min(1.0, decision.get("min_reserve_pct", 0.2)))),
-                "defer_ev_charging":  float(max(0.0, min(1.0, decision.get("defer_ev_charging", 0.0)))),
-                "accept_dr_bid":      bool(decision.get("accept_dr_bid", False)),
-                "p2p_export_rate":    float(max(0.0, min(1.0, decision.get("p2p_export_rate", 0.0)))),
-            }
-        except Exception as e:
-            err_msg = str(e).lower()
-            if "429" in err_msg or "rate limit" in err_msg or "too many requests" in err_msg:
-                sleep_time = 4 ** attempt
-                print(f"[INFO] Rate limit hit. Retrying in {sleep_time}s...", file=sys.stderr)
-                time.sleep(sleep_time)
-            else:
-                # Non‑rate‑limit error → fallback immediately
-                print(f"[WARNING] LLM error: {e}. Falling back to rule agent.", file=sys.stderr)
-                return _rule_agent(obs, task_id)
-    # Max retries exceeded
-    print("[WARNING] Max retries reached. Falling back to rule agent.", file=sys.stderr)
-    return _rule_agent(obs, task_id)
+    # ─────────────────────────────────────────────────────────────────────
+    # OpenAI-specific response handling
+    # ─────────────────────────────────────────────────────────────────────
+    if CLIENT_TYPE == "openai":
+        max_attempts = 4
+        for attempt in range(max_attempts):
+            try:
+                time.sleep(1.0)  # Rate limit pacing
+                response = client.chat.completions.create(
+                    model=DEFAULT_MODEL,
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.1,
+                    max_tokens=120,
+                )
+                # OpenAI response structure
+                text = response.choices[0].message.content.strip()
+                decision = _extract_json(text)
+                return {
+                    "global_charge_rate": float(max(-1.0, min(1.0, decision.get("global_charge_rate", 0.0)))),
+                    "min_reserve_pct": float(max(0.0, min(1.0, decision.get("min_reserve_pct", 0.2)))),
+                    "defer_ev_charging": float(max(0.0, min(1.0, decision.get("defer_ev_charging", 0.0)))),
+                    "accept_dr_bid": bool(decision.get("accept_dr_bid", False)),
+                    "p2p_export_rate": float(max(0.0, min(1.0, decision.get("p2p_export_rate", 0.0)))),
+                }
+            except Exception as e:
+                err_msg = str(e).lower()
+                if "429" in err_msg or "rate limit" in err_msg or "too many requests" in err_msg:
+                    sleep_time = 4 ** attempt
+                    print(f"[INFO] OpenAI rate limit. Retrying in {sleep_time}s...", file=sys.stderr)
+                    time.sleep(sleep_time)
+                else:
+                    print(f"[WARNING] OpenAI error: {e}. Falling back to rule agent.", file=sys.stderr)
+                    return _rule_agent(obs, task_id)
+        print("[WARNING] OpenAI: Max retries exceeded. Falling back to rule agent.", file=sys.stderr)
+        return _rule_agent(obs, task_id)
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Groq-specific response handling
+    # ─────────────────────────────────────────────────────────────────────
+    elif CLIENT_TYPE == "groq":
+        max_attempts = 3  # Groq API typically more stable, fewer retries needed
+        for attempt in range(max_attempts):
+            try:
+                time.sleep(0.5)  # Groq can handle faster rate
+                response = client.chat.completions.create(
+                    model=DEFAULT_MODEL,
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.1,
+                    max_tokens=120,
+                )
+                # Groq response structure (compatible with OpenAI)
+                text = response.choices[0].message.content.strip()
+                decision = _extract_json(text)
+                return {
+                    "global_charge_rate": float(max(-1.0, min(1.0, decision.get("global_charge_rate", 0.0)))),
+                    "min_reserve_pct": float(max(0.0, min(1.0, decision.get("min_reserve_pct", 0.2)))),
+                    "defer_ev_charging": float(max(0.0, min(1.0, decision.get("defer_ev_charging", 0.0)))),
+                    "accept_dr_bid": bool(decision.get("accept_dr_bid", False)),
+                    "p2p_export_rate": float(max(0.0, min(1.0, decision.get("p2p_export_rate", 0.0)))),
+                }
+            except Exception as e:
+                err_msg = str(e).lower()
+                if "429" in err_msg or "rate limit" in err_msg:
+                    sleep_time = 2 ** attempt
+                    print(f"[INFO] Groq rate limit. Retrying in {sleep_time}s...", file=sys.stderr)
+                    time.sleep(sleep_time)
+                else:
+                    print(f"[WARNING] Groq error: {e}. Falling back to rule agent.", file=sys.stderr)
+                    return _rule_agent(obs, task_id)
+        print("[WARNING] Groq: Max retries exceeded. Falling back to rule agent.", file=sys.stderr)
+        return _rule_agent(obs, task_id)
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Hugging Face Router (generic OpenAI-compatible handling)
+    # ─────────────────────────────────────────────────────────────────────
+    else:  # CLIENT_TYPE == "huggingface"
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            try:
+                time.sleep(1.0)
+                response = client.chat.completions.create(
+                    model=DEFAULT_MODEL,
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.1,
+                    max_tokens=120,
+                )
+                # HF Router response structure
+                text = response.choices[0].message.content.strip()
+                decision = _extract_json(text)
+                return {
+                    "global_charge_rate": float(max(-1.0, min(1.0, decision.get("global_charge_rate", 0.0)))),
+                    "min_reserve_pct": float(max(0.0, min(1.0, decision.get("min_reserve_pct", 0.2)))),
+                    "defer_ev_charging": float(max(0.0, min(1.0, decision.get("defer_ev_charging", 0.0)))),
+                    "accept_dr_bid": bool(decision.get("accept_dr_bid", False)),
+                    "p2p_export_rate": float(max(0.0, min(1.0, decision.get("p2p_export_rate", 0.0)))),
+                }
+            except Exception as e:
+                err_msg = str(e).lower()
+                if "429" in err_msg or "rate limit" in err_msg:
+                    sleep_time = 4 ** attempt
+                    print(f"[INFO] HF Router rate limit. Retrying in {sleep_time}s...", file=sys.stderr)
+                    time.sleep(sleep_time)
+                else:
+                    print(f"[WARNING] HF Router error: {e}. Falling back to rule agent.", file=sys.stderr)
+                    return _rule_agent(obs, task_id)
+        print("[WARNING] HF Router: Max retries exceeded. Falling back to rule agent.", file=sys.stderr)
+        return _rule_agent(obs, task_id)
 
 
 def run_episode(task_id: str) -> float:
