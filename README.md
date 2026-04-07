@@ -1,3 +1,13 @@
+---
+title: Virtual Power Plant Orchestrator
+emoji: ⚡
+colorFrom: blue
+colorTo: green
+sdk: docker
+app_file: server/app.py
+pinned: false
+---
+
 # Virtual Power Plant Orchestrator — Extended Edition
 
 > **OpenEnv environment** — an AI agent manages 100 home batteries in a simulated neighbourhood to maximise a **multi-objective Pareto score** across five difficulty tiers, incorporating battery degradation, carbon credits, P2P trading, demand-response auctions, and grid islanding emergencies.
