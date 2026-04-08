@@ -8,7 +8,7 @@
 
 ---
 
-## 🌟 Key Features (Extended Edition)
+## Key Features (Extended Edition)
 
 | Feature | Description | Strategic Impact |
 |:---|:---|:---|
@@ -25,7 +25,7 @@
 
 ---
 
-## 🚀 Quick Start Guide
+## Quick Start Guide
 
 ### 1. Installation
 
@@ -83,7 +83,7 @@ For rigorous evaluation, the following environment variables must be configured:
 
 ---
 
-## 🏗 System Architecture & Physics Models
+## System Architecture & Physics Models
 
 ### Battery Degradation Dynamics
 ```text
@@ -111,7 +111,7 @@ p2p_revenue       = p2p_exported_kw × 0.25h × (p2p_price / 1000) [per home]
 
 ---
 
-## 🎯 Evaluation Tasks
+## Evaluation Tasks
 
 The environment supports five progressive difficulty tiers:
 
@@ -128,7 +128,7 @@ The environment supports five progressive difficulty tiers:
 
 ---
 
-## 📊 State and Action Geometries
+## State and Action Geometries
 
 ### Action Space Outline
 
@@ -191,7 +191,7 @@ Key additions to the state representations include:
 
 ---
 
-## ⚖️ The Pareto Grader
+## The Pareto Grader
 
 Scoring relies on a multi-dimensional Pareto approach to balance competing utility functions:
 
@@ -209,7 +209,7 @@ The comprehensive response structure from `GET /grader` displays performance vec
 
 ---
 
-## 🧠 Reasoning Trace Implementation
+## Reasoning Trace Implementation
 
 Submit cognitive reasoning alongside an execution step specifically via `POST /trace`.
 
@@ -223,7 +223,7 @@ All semantic rationales are permanently logged in the session memory. `GET /trac
 
 ---
 
-## 🔌 API Reference
+## API Reference
 
 | HTTP Method | Endpoint | Functional Description |
 |:---:|:---|:---|
@@ -240,7 +240,7 @@ All semantic rationales are permanently logged in the session memory. `GET /trac
 
 ---
 
-## 🧠 Reinforcement Learning (RL) Curriculum
+## Reinforcement Learning (RL) Curriculum
 
 A standard setup to train a custom agent via Proximal Policy Optimization (PPO):
 
@@ -261,7 +261,7 @@ python train_rl.py
 
 ---
 
-## 🐳 Deployment & Validations
+## Deployment & Validations
 
 **Docker Build & Verification:**
 ```bash
@@ -290,7 +290,7 @@ python baseline_inference.py --agent rule --json-only
 
 ---
 
-## 📂 Project Structure
+## Project Structure
 
 ```text
 ├── inference.py             # Main submission utility block
