@@ -1,3 +1,21 @@
+---
+title: Virtual Power Plant Orchestrator — Extended Edition
+emoji: ⚡
+colorFrom: green
+colorTo: blue
+sdk: docker
+app_file: Dockerfile
+app_port: 7860
+python_version: "3.10"
+tags:
+  - fastapi
+  - reinforcement-learning
+  - virtual-power-plant
+  - energy
+  - simulation
+license: mit
+---
+
 # Virtual Power Plant Orchestrator — Extended Edition
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
