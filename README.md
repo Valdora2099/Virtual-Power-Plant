@@ -1,4 +1,5 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 ---
 title: Virtual Power Plant Orchestrator — Extended Edition
 emoji: ⚡
@@ -19,6 +20,10 @@ license: mit
 
 # Virtual Power Plant Orchestrator — Extended Edition
 
+=======
+# Virtual Power Plant Orchestrator — Extended Edition
+
+>>>>>>> parent of 05c9567 (Update server configuration and enhance environment specifications)
 =======
 # Virtual Power Plant Orchestrator — Extended Edition
 
@@ -46,10 +51,13 @@ license: mit
 
 ## Quick Start Guide
 
+<<<<<<< HEAD
 ### 1. Installation
 
 Clone the repository and install the required dependencies:
 
+=======
+>>>>>>> parent of 05c9567 (Update server configuration and enhance environment specifications)
 ```bash
 # 1. Install
 git clone https://huggingface.co/spaces/<your-username>/vpp-env
@@ -62,6 +70,7 @@ uvicorn server.app:app --host 0.0.0.0 --port 7860
 # 3. Run the rule-based baseline (no API key)
 python baseline_inference.py --agent rule
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 ### Run the Server
 
@@ -86,6 +95,8 @@ uvicorn server.app:app --host 0.0.0.0 --port 7860
 # 3. Run the rule-based baseline (no API key)
 python baseline_inference.py --agent rule
 
+=======
+>>>>>>> parent of 05c9567 (Update server configuration and enhance environment specifications)
 =======
 >>>>>>> parent of 05c9567 (Update server configuration and enhance environment specifications)
 # 4. Run the LLM agent
@@ -122,6 +133,7 @@ The submission script is `inference.py` at project root and uses the OpenAI Pyth
 - `[END] success=<true|false> steps=<n> score=<score> rewards=<r1,r2,...,rn>`
 
 Only those lines are printed to stdout. Diagnostics are written to stderr.
+<<<<<<< HEAD
 `inference.py` emits structured stdout in strict evaluator format:
 
 - `[START] task=<task_name> env=vpp model=<model_name>`
@@ -129,6 +141,8 @@ Only those lines are printed to stdout. Diagnostics are written to stderr.
 - `[END] success=<true|false> steps=<n> score=<score> rewards=<r1,r2,...,rn>`
 
 Only those lines are printed to stdout. Diagnostics are written to stderr.
+=======
+>>>>>>> parent of 05c9567 (Update server configuration and enhance environment specifications)
 
 ---
 
@@ -136,6 +150,7 @@ Only those lines are printed to stdout. Diagnostics are written to stderr.
 
 ### Easy — Arbitrage (`easy-arbitrage`) ⭐☆☆☆☆
 Clear sky, low demand, flat $50/MWh. Sell solar surplus. Profit target: $500.
+<<<<<<< HEAD
 ### Easy — Arbitrage (`easy-arbitrage`) ⭐☆☆☆☆
 Clear sky, low demand, flat $50/MWh. Sell solar surplus. Profit target: $500.
 
@@ -158,6 +173,20 @@ DR bids every 6 steps (1.5–3.0× premium). **Adversarial cloud event at step 2
 Grid disconnects at 11:00 (step 20) for 10 steps. Agent gets `grid_connected=False` warning. Must keep 100 homes powered from batteries alone. Grid reconnects at 13:30 (step 30) with **8× price spike** — agent must have charge ready. Profit target: $400.
 ### Islanding Emergency (`islanding-emergency`) ⭐⭐⭐⭐☆
 Grid disconnects at 11:00 (step 20) for 10 steps. Agent gets `grid_connected=False` warning. Must keep 100 homes powered from batteries alone. Grid reconnects at 13:30 (step 30) with **8× price spike** — agent must have charge ready. Profit target: $400.
+=======
+
+### Medium — Forecast Error (`medium-forecast-error`) ⭐⭐☆☆☆
+Heatwave: AC demand spikes 4× from 10:00–14:00. Sinusoidal $35–$65/MWh pricing. Profit target: $200.
+
+### Hard — Frequency Response (`hard-frequency-response`) ⭐⭐⭐☆☆
+10× price spike at 12:30 (step 26). Grid frequency drops to 49.5 Hz. Must discharge immediately. Profit target: $1000.
+
+### Expert — Demand Response (`expert-demand-response`) ⭐⭐⭐⭐☆
+DR bids every 6 steps (1.5–3.0× premium). **Adversarial cloud event at step 24** (forecast says clear sky, solar drops 80%). Demand spike at step 20. Agent must decide which bids to accept vs risk. Profit target: $800.
+
+### Islanding Emergency (`islanding-emergency`) ⭐⭐⭐⭐☆
+Grid disconnects at 11:00 (step 20) for 10 steps. Agent gets `grid_connected=False` warning. Must keep 100 homes powered from batteries alone. Grid reconnects at 13:30 (step 30) with **8× price spike** — agent must have charge ready. Profit target: $400.
+>>>>>>> parent of 05c9567 (Update server configuration and enhance environment specifications)
 
 ---
 
@@ -172,6 +201,7 @@ Grid disconnects at 11:00 (step 20) for 10 steps. Agent gets `grid_connected=Fal
   "p2p_export_rate": 0.3,
   "reasoning": "Price is high at $65/MWh and SoC is 72%; selling at -0.7 rate. Accepting DR bid with 2.5× premium since SoC supports delivery."
 }
+<<<<<<< HEAD
 ## Action Space (Extended)
 
 ```json
@@ -183,6 +213,8 @@ Grid disconnects at 11:00 (step 20) for 10 steps. Agent gets `grid_connected=Fal
   "p2p_export_rate": 0.3,
   "reasoning": "Price is high at $65/MWh and SoC is 72%; selling at -0.7 rate. Accepting DR bid with 2.5× premium since SoC supports delivery."
 }
+=======
+>>>>>>> parent of 05c9567 (Update server configuration and enhance environment specifications)
 ```
 
 | Field | Type | Range | Description |
@@ -193,6 +225,7 @@ Grid disconnects at 11:00 (step 20) for 10 steps. Agent gets `grid_connected=Fal
 | `accept_dr_bid` | bool | — | Accept the current demand-response grid bid |
 | `p2p_export_rate` | float | [0, 1] | Fraction of Zone B solar surplus to route to Zone A |
 | `reasoning` | string | ≤500 chars | Optional reasoning trace for LLM quality scoring |
+<<<<<<< HEAD
 | Field | Type | Range | Description |
 |---|---|---|---|
 | `global_charge_rate` | float | [-1, +1] | Charge/discharge rate |
@@ -201,6 +234,8 @@ Grid disconnects at 11:00 (step 20) for 10 steps. Agent gets `grid_connected=Fal
 | `accept_dr_bid` | bool | — | Accept the current demand-response grid bid |
 | `p2p_export_rate` | float | [0, 1] | Fraction of Zone B solar surplus to route to Zone A |
 | `reasoning` | string | ≤500 chars | Optional reasoning trace for LLM quality scoring |
+=======
+>>>>>>> parent of 05c9567 (Update server configuration and enhance environment specifications)
 
 ---
 
@@ -244,6 +279,7 @@ Key new signals:
 ---
 
 ## Pareto Grader
+<<<<<<< HEAD
 ## Observation Space (Extended)
 
 New fields vs base version:
@@ -284,17 +320,24 @@ Key new signals:
 ---
 
 ## Pareto Grader
+=======
+>>>>>>> parent of 05c9567 (Update server configuration and enhance environment specifications)
 
 ```
 profit_score     = min(1, total_profit / profit_target)
 safety_score     = 1 − violation_ratio × 0.60 − emergency_ratio × 0.40
 carbon_score     = min(1, carbon_balance / carbon_target)
+<<<<<<< HEAD
 profit_score     = min(1, total_profit / profit_target)
 safety_score     = 1 − violation_ratio × 0.60 − emergency_ratio × 0.40
 carbon_score     = min(1, carbon_balance / carbon_target)
 degradation_score = (mean_soh − 0.80) / 0.20
 dr_score          = fulfilled_bids / accepted_bids   (1.0 if no bids)
 dr_score          = fulfilled_bids / accepted_bids   (1.0 if no bids)
+=======
+degradation_score = (mean_soh − 0.80) / 0.20
+dr_score          = fulfilled_bids / accepted_bids   (1.0 if no bids)
+>>>>>>> parent of 05c9567 (Update server configuration and enhance environment specifications)
 
 aggregate = 0.50 × profit + 0.20 × safety + 0.15 × carbon
           + 0.10 × degradation + 0.05 × DR
@@ -317,6 +360,7 @@ aggregate = 0.50 × profit + 0.20 × safety + 0.15 × carbon
   "dr_bids_fulfilled": 3,
   "dr_bids_failed": 1
 }
+<<<<<<< HEAD
 aggregate = 0.50 × profit + 0.20 × safety + 0.15 × carbon
           + 0.10 × degradation + 0.05 × DR
 ```
@@ -363,6 +407,12 @@ cycle_increment     = |delta_kwh| / (2 × capacity_kwh)   per asset per step
 cumulative_cycles  += cycle_increment
 new_soh             = max(0.80, 1.0 − cumulative_cycles × 0.001)
 effective_capacity  = capacity_kwh × soh
+=======
+```
+
+---
+
+>>>>>>> parent of 05c9567 (Update server configuration and enhance environment specifications)
 ## Reasoning Trace Scoring
 
 Submit reasoning alongside an action via `POST /trace`:
@@ -391,19 +441,25 @@ A battery cycled at full rate every step degrades ~0.12% over a 12-hour episode.
 ---
 
 ## Carbon Credits Physics
+<<<<<<< HEAD
 A battery cycled at full rate every step degrades ~0.12% over a 12-hour episode. Agents that unnecessarily cycle batteries (buying high, selling low) will see measurable SoH degradation within 10 episodes of RL training.
 
 ---
 
 ## Carbon Credits Physics
+=======
+>>>>>>> parent of 05c9567 (Update server configuration and enhance environment specifications)
 
 ```
 earned per step = solar_kw × 0.25 h × 0.05 credits/kWh × 100 homes
 spent per step  = grid_charge_kw × η × 0.25 h × 0.08 credits/kWh × 100 homes
                   (only during steps 0–16, the high-emission morning window)
+<<<<<<< HEAD
 earned per step = solar_kw × 0.25 h × 0.05 credits/kWh × 100 homes
 spent per step  = grid_charge_kw × η × 0.25 h × 0.08 credits/kWh × 100 homes
                   (only during steps 0–16, the high-emission morning window)
+=======
+>>>>>>> parent of 05c9567 (Update server configuration and enhance environment specifications)
 ```
 
 ---
@@ -415,6 +471,7 @@ zone_b_surplus_kw = max(0, solar_kw − demand_kw) per Zone B home
 p2p_exported_kw   = zone_b_surplus_kw × p2p_export_rate
 p2p_price         = market_price × 0.75   (midpoint benefit vs spot)
 p2p_revenue       = p2p_exported_kw × 0.25 h × (p2p_price / 1000) per home
+<<<<<<< HEAD
 ## P2P Trading Physics
 
 ```
@@ -422,6 +479,8 @@ zone_b_surplus_kw = max(0, solar_kw − demand_kw) per Zone B home
 p2p_exported_kw   = zone_b_surplus_kw × p2p_export_rate
 p2p_price         = market_price × 0.75   (midpoint benefit vs spot)
 p2p_revenue       = p2p_exported_kw × 0.25 h × (p2p_price / 1000) per home
+=======
+>>>>>>> parent of 05c9567 (Update server configuration and enhance environment specifications)
 ```
 
 ---
@@ -444,6 +503,7 @@ p2p_revenue       = p2p_exported_kw × 0.25 h × (p2p_price / 1000) per home
 ---
 
 ## RL Training (5-Phase Curriculum)
+<<<<<<< HEAD
 ## API Reference
 
 | Method | Endpoint | Description |
@@ -458,9 +518,38 @@ p2p_revenue       = p2p_exported_kw × 0.25 h × (p2p_price / 1000) per home
 | GET | `/grader` | Multi-objective Pareto score |
 | GET | `/baseline` | Cached baseline scores |
 | GET | `/baseline?refresh=true` | Recompute baseline scores live |
+=======
 
----
+```bash
+uvicorn server.app:app --host 0.0.0.0 --port 7860
+python train_rl.py
+```
 
+## OpenEnv and Pre-Submission Validation
+
+```bash
+# OpenEnv schema/runtime validation
+openenv validate
+
+# Local validator
+python validate.py --url http://localhost:7860
+
+# Baseline reproducibility check
+python baseline_inference.py --agent rule --json-only
+python baseline_inference.py --agent rule --json-only
+```
+
+## Docker and HF Spaces
+
+```bash
+docker build -t openenv-vpp .
+docker run --rm -p 7860:7860 openenv-vpp
+```
+>>>>>>> parent of 05c9567 (Update server configuration and enhance environment specifications)
+
+Health check:
+
+<<<<<<< HEAD
 ## RL Training (5-Phase Curriculum)
 
 ```bash
@@ -510,6 +599,12 @@ Health check:
 curl http://localhost:7860/health
 ```
 
+=======
+```bash
+curl http://localhost:7860/health
+```
+
+>>>>>>> parent of 05c9567 (Update server configuration and enhance environment specifications)
 For Hugging Face Spaces, set runtime variables (`API_BASE_URL`, `MODEL_NAME`, `HF_TOKEN`) in Space settings and tag the Space with `openenv`.
 
 Curriculum:
@@ -544,6 +639,7 @@ Curriculum:
 ├── baseline_scores.json     # Pre-computed Pareto scores
 ├── Dockerfile
 └── requirements.txt
+<<<<<<< HEAD
 ```
 docker build -t openenv-vpp .
 docker run --rm -p 7860:7860 openenv-vpp
@@ -589,4 +685,6 @@ Curriculum:
 ├── baseline_scores.json     # Pre-computed Pareto scores
 ├── Dockerfile
 └── requirements.txt
+=======
+>>>>>>> parent of 05c9567 (Update server configuration and enhance environment specifications)
 ```
