@@ -15,12 +15,13 @@ This script automatically falls back to a rule‑based agent if:
 It supports OpenAI only.
 """
 
+import asyncio
 import json
 import os
 import re
 import sys
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Coroutine, Dict, List, Optional
 
 import requests
 from openai import OpenAI
@@ -294,6 +295,12 @@ def _strict_open_unit_interval(value: float) -> float:
     return value
 
 
+def _ensure_env_instance(env_instance: VppEnv | Coroutine[Any, Any, VppEnv]) -> VppEnv:
+    if asyncio.iscoroutine(env_instance):
+        return asyncio.run(env_instance)
+    return env_instance
+
+
 def run_episode(task_id: str) -> float:
     """
     Run one full episode and emit strict [START]/[STEP]/[END] format to stdout.
@@ -314,7 +321,7 @@ def run_episode(task_id: str) -> float:
         sys.stdout.write(f"[START] task={task_id} env={BENCHMARK} model={DEFAULT_MODEL}\n")
         sys.stdout.flush()
 
-        env_instance = (
+        env_instance = _ensure_env_instance(
             VppEnv.from_docker_image(LOCAL_IMAGE_NAME, task=task_id)
             if LOCAL_IMAGE_NAME
             else VppEnv(base_url=VPP_SERVER_URL)
