@@ -67,7 +67,7 @@ from server.task_curves import (
 # OpenEnv's WebSocket endpoint (/ws) handles stateful session management via MCP protocol.
 # HTTP endpoints (/reset, /step) are stateless - use WebSocket for multi-step episodes.
 # Clients should use: from client import VppEnv
-#   with VppEnv(base_url="http://localhost:8000") as client:
+#   with VppEnv(base_url="http://localhost:7860") as client:
 #       result = client.reset(task_id="easy-arbitrage")
 #       result = client.step(action)  # Session persists via WebSocket
 
@@ -506,6 +506,7 @@ class VppEnvironment(Environment):
             "islanding_blackout_homes":   islanding_blackout_homes,
             "new_dr_bid_accepted":        new_dr_bid_accepted,
         }
+        info["pareto_score"] = self._get_pareto_score().model_dump()
         obs = self._build_observation(
             reward=round(reward, 6),
             done=done,
