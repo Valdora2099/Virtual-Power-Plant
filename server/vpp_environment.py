@@ -139,6 +139,7 @@ class VppEnvironment(Environment):
         self._dr_until_step:  int   = 0
         self._dr_power_kw:    float = 0.0
         self._dr_premium:     float = 1.0
+        self._dr_missed_steps: int  = 0
 
         # EV deferral state
         self._ev_defer_debt_kwh: float = 0.0   # kWh still owed
@@ -199,12 +200,14 @@ class VppEnvironment(Environment):
         self._dr_until_step  = 0
         self._dr_power_kw    = 0.0
         self._dr_premium     = 1.0
+        self._dr_missed_steps = 0
         self._ev_defer_debt_kwh = 0.0
         self._reasoning_traces  = []
 
         self._battery_soc    = {a.asset_id: 0.5     for a in self.assets}
         self._battery_soh    = {a.asset_id: 1.0     for a in self.assets}
         self._battery_cycles = {a.asset_id: 0.0     for a in self.assets}
+        self._dr_missed_steps = 0
 
         meta    = TASK_METADATA.get(task_id, TASK_METADATA["easy-arbitrage"])
         weather = meta["weather"]
@@ -288,6 +291,7 @@ class VppEnvironment(Environment):
                 self._dr_until_step = s + bid_params[2]
                 self._dr_power_kw   = bid_params[1]
                 self._dr_premium    = bid_params[0]
+                self._dr_missed_steps = 0
                 self._state.dr_bids_accepted += 1
                 self._state.dr_active = True
                 self._state.dr_committed_until  = self._dr_until_step
@@ -296,15 +300,16 @@ class VppEnvironment(Environment):
                 new_dr_bid_accepted = True
 
         # Check if DR commitment window ended
-        if self._dr_committed and s >= self._dr_until_step:
+        if self._dr_committed and s > self._dr_until_step:
             self._dr_committed = False
             self._state.dr_active = False
+            self._state.dr_committed_until = 0
+            self._state.dr_committed_power_kw = 0.0
+            self._state.dr_premium_multiplier = 1.0
 
         # ── EV deferral ────────────────────────────────────────────────────
+        # Only Zone B (homes 40-99) has EV chargers; load added after step 32 (14:00)
         ev_defer_frac = float(np.clip(action.defer_ev_charging, 0.0, 1.0))
-        # EV charging that starts after step 32 (14:00)
-        if s >= 32 and s < _ZONE_B_START:
-            pass  # zone-level handled below
 
         # ── Grid emergency tracking ────────────────────────────────────────
         if freq_hz < 49.8 and charge_kw >= 0:
@@ -332,14 +337,23 @@ class VppEnvironment(Environment):
 
         # EV adder for Zone B (after 14:00 = step 32)
         ev_adder_kw = 0.0
-        if s >= 32:
-            ev_adder_kw = 1.2 * (1.0 - ev_defer_frac)  # deferral reduces immediate load
-            self._ev_defer_debt_kwh += 1.2 * ev_defer_frac * 0.25 * len(zone_b_assets)
-        else:
-            # Before deadline, slowly replay deferred debt
-            if s == EV_DEFER_DEADLINE and self._ev_defer_debt_kwh > 0:
-                # Force remaining debt onto batteries at deadline (penalty handled in reward)
-                pass
+        zone_b_count = len(zone_b_assets)
+        if s >= 32 and zone_b_count > 0:
+            base_ev_kw = 1.2
+            deferred_kwh = base_ev_kw * ev_defer_frac * 0.25 * zone_b_count
+            self._ev_defer_debt_kwh += deferred_kwh
+            ev_adder_kw = base_ev_kw * (1.0 - ev_defer_frac)
+
+            # Replay deferred EV energy progressively; force full replay at/after deadline.
+            if self._ev_defer_debt_kwh > 0:
+                if s < EV_DEFER_DEADLINE:
+                    remaining_steps = max(1, EV_DEFER_DEADLINE - s)
+                    replay_kwh = self._ev_defer_debt_kwh / remaining_steps
+                else:
+                    replay_kwh = self._ev_defer_debt_kwh
+
+                ev_adder_kw += replay_kwh / (0.25 * zone_b_count)
+                self._ev_defer_debt_kwh = max(0.0, self._ev_defer_debt_kwh - replay_kwh)
 
         p2p_price_usd = price_usd * _P2P_PRICE_FRACTION
 
@@ -374,9 +388,10 @@ class VppEnvironment(Environment):
                 if not grid_connected:
                     islanding_blackout_homes += 1
 
-            # ── SoH degradation ──────────────────────────────────────────
-            abs_delta_kwh = abs(delta_kwh)
-            self._battery_cycles[asset.asset_id] += abs_delta_kwh / (2.0 * asset.capacity_kwh)
+            # ── SoH degradation (based on actual throughput, not net storage) ──
+            # Count cycles from grid transaction magnitude (not net flow)
+            abs_charge_kwh = abs(charge_kw) * 0.25 if charge_kw != 0 else 0.0
+            self._battery_cycles[asset.asset_id] += abs_charge_kwh / (2.0 * asset.capacity_kwh)
             cycles = self._battery_cycles[asset.asset_id]
             new_soh = max(_SOH_FLOOR, 1.0 - cycles * _DEGRADATION_PER_CYCLE)
 
@@ -385,14 +400,16 @@ class VppEnvironment(Environment):
 
             # ── Grid financial ───────────────────────────────────────────
             if grid_connected:
-                effective_price = price_usd * (self._dr_premium if self._dr_committed else 1.0)
                 exported_kwh    = -charge_kw * 0.25
+                effective_price = price_usd * (
+                    self._dr_premium if (self._dr_committed and exported_kwh > 0) else 1.0
+                )
                 home_profit     = exported_kwh * (effective_price / 1000.0)
                 step_profit    += home_profit
                 if exported_kwh > 0:
                     step_revenue += home_profit
                     if self._dr_committed:
-                        dr_bonus += home_profit * (self._dr_premium - 1.0)
+                        dr_bonus += exported_kwh * (price_usd / 1000.0) * (self._dr_premium - 1.0)
                 else:
                     step_cost    += abs(home_profit)
 
@@ -400,6 +417,7 @@ class VppEnvironment(Environment):
             if is_zone_b and p2p_kw > 0:
                 p2p_revenue_home  = p2p_kw * 0.25 * (p2p_price_usd / 1000.0)
                 step_p2p_revenue += p2p_revenue_home
+                step_revenue     += p2p_revenue_home
                 step_profit      += p2p_revenue_home
 
             # ── Carbon credits ────────────────────────────────────────────
@@ -408,29 +426,37 @@ class VppEnvironment(Environment):
             earned    = solar_kwh * _CARBON_EARN_RATE
             step_carbon_earned += earned
 
-            # Spend on grid purchases during high-emission hours
-            if s in HIGH_EMISSION_STEPS and charge_kw > 0 and grid_connected:
-                bought_kwh = charge_kw * asset.efficiency_rt * 0.25
-                spent      = bought_kwh * _CARBON_SPEND_RATE
-                step_carbon_spent += spent
+        # ── Global carbon spend (grid purchases during high-emission hours) ─
+        if s in HIGH_EMISSION_STEPS and charge_kw > 0 and grid_connected:
+            bought_kwh = charge_kw * 0.25
+            spent      = bought_kwh * _CARBON_SPEND_RATE
+            step_carbon_spent += spent
 
         # ── DR commitment enforcement ──────────────────────────────────────
         if self._dr_committed and grid_connected:
-            # Check if agent is delivering enough power
-            if charge_kw > -self._dr_power_kw:   # not discharging enough
-                missed_kwh  = (self._dr_power_kw + charge_kw) * 0.25 * 100
-                dr_penalty  = missed_kwh * (price_usd * self._dr_premium / 1000.0) * _DR_FAIL_PENALTY_MULT
+            # Check if agent is delivering enough power (discharge_kw must be >= dr_power_kw)
+            discharge_kw = abs(charge_kw) if charge_kw < 0 else 0.0
+            if discharge_kw < self._dr_power_kw:   # not discharging enough
+                shortfall_kw = self._dr_power_kw - discharge_kw
+                missed_kwh   = shortfall_kw * 0.25
+                dr_penalty   = missed_kwh * (price_usd * self._dr_premium / 1000.0) * _DR_FAIL_PENALTY_MULT
                 step_profit -= dr_penalty
-                # Track if this DR commitment ended in failure
-                if s == self._dr_until_step - 1:
+                step_cost   += dr_penalty
+                self._dr_missed_steps += 1
+
+            if s == self._dr_until_step - 1:
+                if self._dr_missed_steps > 0:
                     self._state.dr_bids_failed += 1
-            elif s == self._dr_until_step - 1:
-                self._state.dr_bids_fulfilled += 1
+                else:
+                    self._state.dr_bids_fulfilled += 1
 
         # ── Islanding blackout penalty ─────────────────────────────────────
+        # Each home that experiences blackout (SoC=0 + demand>0 while grid disconnected)
+        # incurs a penalty per step. Total accumulated = sum across all affected homes and steps.
         if not grid_connected and islanding_blackout_homes > 0:
             islanding_penalty = islanding_blackout_homes * _ISLANDING_BLACKOUT_PENALTY
             step_profit -= islanding_penalty
+            step_cost   += islanding_penalty
             self._state.islanding_blackouts += islanding_blackout_homes
 
         # ── Accumulate state ───────────────────────────────────────────────
@@ -553,8 +579,7 @@ class VppEnvironment(Environment):
         carbon_target = meta["carbon_target_credits"]
 
         # Profit (with epsilon clamping to stay strictly in (0, 1))
-        total_profit = self._state.cumulative_profit_usd + \
-                       self._state.cumulative_p2p_usd
+        total_profit = self._state.cumulative_profit_usd
         profit_score = float(np.clip(total_profit / max(goal, 1.0), _SCORE_EPSILON, 1.0 - _SCORE_EPSILON))
 
         # Safety (violations + emergencies) (with epsilon clamping)
@@ -633,14 +658,17 @@ class VppEnvironment(Environment):
     # ── Helpers ───────────────────────────────────────────────────────────────
 
     def _grid_frequency(self, step: int) -> float:
-        """49.5 Hz emergency at step 26 for the hard task only."""
+        """
+        49.5 Hz emergency ONLY during hard-frequency-response task at step 26.
+        Other tasks always see nominal 50.0 Hz grid frequency.
+        """
         if self._task_id == "hard-frequency-response" and step == GRID_STRESS_STEP:
             return 49.5
         return 50.0
 
     def _is_grid_connected(self, step: int) -> bool:
         """Grid disconnects during islanding task between ISLANDING_START and ISLANDING_END."""
-        if self._task_id == "islanding-emergency":
+        if self._task_id == "hard-islanding":
             return not (ISLANDING_START <= step < ISLANDING_END)
         return True
 
@@ -691,7 +719,7 @@ class VppEnvironment(Environment):
 
             ev_adder = 0.0
             if has_ev and idx >= 32:
-                ev_adder = 1.2
+                ev_adder = self._project_zone_b_ev_adder(idx)
 
             # P2P available power (Zone B surplus)
             surplus_kw = max(0.0, solar_kw - (demand_kw + ev_adder)) if has_ev else 0.0
@@ -713,6 +741,24 @@ class VppEnvironment(Environment):
 
         return result
 
+    def _project_zone_b_ev_adder(self, step: int) -> float:
+        """Projected Zone B EV load per home for observations/aggregates."""
+        if step < 32:
+            return 0.0
+
+        base_ev_kw = 1.2
+        zone_b_count = _ZONE_B_END - _ZONE_B_START
+        if zone_b_count <= 0 or self._ev_defer_debt_kwh <= 0:
+            return base_ev_kw
+
+        if step < EV_DEFER_DEADLINE:
+            remaining_steps = max(1, EV_DEFER_DEADLINE - step)
+            replay_kwh = self._ev_defer_debt_kwh / remaining_steps
+        else:
+            replay_kwh = self._ev_defer_debt_kwh
+
+        return base_ev_kw + replay_kwh / (0.25 * zone_b_count)
+
     def _build_observation(
         self,
         reward: float = 0.0,
@@ -726,15 +772,18 @@ class VppEnvironment(Environment):
         now = self._episode_start + timedelta(minutes=15 * idx)
 
         # Per-home telemetry (includes SoH)
+        ev_zone_b_kw = self._project_zone_b_ev_adder(idx)
         telemetry = [
             BatteryTelemetry(
                 asset_id=asset.asset_id,
                 soc=self._battery_soc[asset.asset_id],
                 state_of_health=self._battery_soh[asset.asset_id],
-                current_house_load_kw=float(self._true_demand[idx]),
+                current_house_load_kw=float(
+                    self._true_demand[idx] + (ev_zone_b_kw if i >= _ZONE_B_START else 0.0)
+                ),
                 current_solar_gen_kw=float(self._true_solar[idx]),
             )
-            for asset in self.assets
+            for i, asset in enumerate(self.assets)
         ]
 
         zone_aggregates = self._build_zone_aggregates(idx)
