@@ -284,7 +284,6 @@ class VppEnvironment(Environment):
         self._battery_soc    = {a.asset_id: 0.5     for a in self.assets}
         self._battery_soh    = {a.asset_id: 1.0     for a in self.assets}
         self._battery_cycles = {a.asset_id: 0.0     for a in self.assets}
-        self._dr_missed_steps = 0
 
         meta    = TASK_METADATA.get(task_id, TASK_METADATA["easy-arbitrage"])
         weather = meta["weather"]
@@ -357,9 +356,9 @@ class VppEnvironment(Environment):
         freq_hz       = self._grid_frequency(s)
         grid_connected = self._is_grid_connected(s)
         meta          = TASK_METADATA.get(self._task_id, {})
-        emergency_active = (freq_hz < 49.8) or (not grid_connected)
-        reserve_floor = _EMERGENCY_RESERVE_FLOOR if emergency_active else _HOME_RESERVE_FLOOR
-        required_reserve = max(float(action.min_reserve_pct), reserve_floor)
+        step_emergency_active = (freq_hz < 49.8) or (not grid_connected)
+        step_reserve_floor = _EMERGENCY_RESERVE_FLOOR if step_emergency_active else _HOME_RESERVE_FLOOR
+        step_required_reserve = max(float(action.min_reserve_pct), step_reserve_floor)
         prev_mean_soh = self._state.mean_state_of_health
 
         if freq_hz < 49.8 and self._emergency_start_step is None:
@@ -496,7 +495,7 @@ class VppEnvironment(Environment):
                 actual_charge_kw = effective_kw / max(asset.efficiency_rt, 1e-6)
             else:
                 desired_effective_kw = charge_kw
-                min_effective_kw_from_soc = ((required_reserve - old_soc) * eff_capacity / 0.25) - base_net_kw
+                min_effective_kw_from_soc = ((step_required_reserve - old_soc) * eff_capacity / 0.25) - base_net_kw
                 min_effective_kw_from_soc = min(0.0, min_effective_kw_from_soc)
                 effective_kw = float(np.clip(desired_effective_kw, min_effective_kw_from_soc, 0.0))
                 actual_charge_kw = effective_kw
@@ -512,13 +511,13 @@ class VppEnvironment(Environment):
             new_soc      = float(np.clip(new_soc, 0.0, 1.0))
 
             # Violation check
-            if new_soc < required_reserve:
+            if new_soc < step_required_reserve:
                 step_has_violation = True
 
             if (
                 not grid_connected
                 and net_kw < 0.0
-                and new_soc <= required_reserve + _SCORE_EPSILON
+                and new_soc <= step_required_reserve + _SCORE_EPSILON
             ):
                 unmet_kw = abs(net_kw)
                 critical_unserved_kw = max(0.0, unmet_kw - flexible_demand_kw)
@@ -685,11 +684,11 @@ class VppEnvironment(Environment):
         self._state.total_cycle_count    = round(sum(self._battery_cycles.values()), 4)
 
         mean_soc = float(np.mean(list(self._battery_soc.values()))) if self._battery_soc else 0.0
-        safety_margin_pct = (mean_soc - required_reserve) * 100.0
+        step_safety_margin_pct = (mean_soc - step_required_reserve) * 100.0
         carbon_step_bonus = (step_carbon_earned - step_carbon_spent) * _STEP_CARBON_REWARD_MULT
         soh_drop = max(0.0, prev_mean_soh - self._state.mean_state_of_health)
         degradation_penalty = soh_drop * _STEP_DEGRADATION_PENALTY_MULT
-        safety_margin_bonus = _STEP_SAFETY_MARGIN_BONUS if safety_margin_pct >= 10.0 else 0.0
+        safety_margin_bonus = _STEP_SAFETY_MARGIN_BONUS if step_safety_margin_pct >= 10.0 else 0.0
 
         # ── Reward ─────────────────────────────────────────────────────────
         safety_penalty = _STEP_SAFETY_VIOLATION_PENALTY if step_has_violation else 0.0
@@ -719,7 +718,16 @@ class VppEnvironment(Environment):
         self._state.step_count     += 1
         self._state.current_step    = self._current_step
         self._state.done            = done
-        self._frequency_history.append(round(freq_hz, 3))
+        # Keep trend and emergency flags aligned with the observation index returned below.
+        obs_step_index = min(self._current_step, EPISODE_STEPS - 1)
+        obs_freq_hz = self._grid_frequency(obs_step_index)
+        obs_grid_connected = self._is_grid_connected(obs_step_index)
+        obs_emergency_active = (obs_freq_hz < 49.8) or (not obs_grid_connected)
+        obs_reserve_floor = _EMERGENCY_RESERVE_FLOOR if obs_emergency_active else _HOME_RESERVE_FLOOR
+        obs_required_reserve = max(float(action.min_reserve_pct), obs_reserve_floor)
+        obs_safety_margin_pct = (mean_soc - obs_required_reserve) * 100.0
+
+        self._frequency_history.append(round(obs_freq_hz, 3))
         self._frequency_history = self._frequency_history[-3:]
 
         # Reasoning trace
@@ -746,8 +754,8 @@ class VppEnvironment(Environment):
             "blackout_this_step":         step_has_blackout,
             "grid_frequency_hz":          round(freq_hz, 3),
             "grid_connected":             grid_connected,
-            "safety_margin_pct":          round(safety_margin_pct, 3),
-            "emergency_active":           emergency_active,
+            "safety_margin_pct":          round(step_safety_margin_pct, 3),
+            "emergency_active":           step_emergency_active,
             "response_latency_steps_to_emergency": (
                 self._response_latency_steps if self._response_latency_steps is not None else -1
             ),
@@ -783,8 +791,8 @@ class VppEnvironment(Environment):
             done=done,
             metadata=info,
             pareto_score=pareto_score,
-            safety_margin_pct=round(safety_margin_pct, 3),
-            emergency_active=emergency_active,
+            safety_margin_pct=round(obs_safety_margin_pct, 3),
+            emergency_active=obs_emergency_active,
             demand_shed_this_step_kwh=round(step_demand_shed_kwh, 4),
             cumulative_demand_shed_kwh=round(self._cumulative_demand_shed_kwh, 4),
             carbon_earned_this_step=round(step_carbon_earned, 4),

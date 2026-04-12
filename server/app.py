@@ -32,7 +32,6 @@ from models import VppAction, VppObservation, VppState, ParetoScore, VppReward
 from server.vpp_environment import VppEnvironment
 from server.task_curves import ALL_TASK_IDS, TASK_METADATA
 
-
 # ---------------------------------------------------------------------------
 # Create OpenEnv app with lifecycle and session management
 # ---------------------------------------------------------------------------
@@ -67,6 +66,12 @@ _PARETO_WEIGHTS = {
     "dr": 0.05,
 }
 
+def _env_flag_true(name: str, default: str = "0") -> bool:
+    value = os.getenv(name, default)
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+_EXPOSE_GRADER_SNAPSHOT = _env_flag_true("VPP_EXPOSE_GRADER_SNAPSHOT", "0")
 
 def _baseline_scores_path() -> str:
     """Primary path for persisted baseline scores."""
@@ -74,7 +79,6 @@ def _baseline_scores_path() -> str:
     if configured:
         return os.path.abspath(configured)
     return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "baseline_scores.json"))
-
 
 def _fallback_baseline_scores_path() -> str:
     """Fallback cache path for environments where source directories are read-only."""
@@ -92,8 +96,6 @@ def _resolve_server_url() -> str:
         host = "127.0.0.1"
     port = os.getenv("PORT", "7860")
     return f"http://{host}:{port}"
-
-
 
 # ---------------------------------------------------------------------------
 # IMPORTANT: Custom endpoints usage
@@ -115,14 +117,11 @@ def _resolve_server_url() -> str:
 #   → Switch to VppEnv client which auto-detects and uses WebSocket
 # ---------------------------------------------------------------------------
 
-
-
 # ---------------------------------------------------------------------------
 # Custom Endpoints (OpenEnv-compatible extensions)
 # ---------------------------------------------------------------------------
 # Note: create_app provides /health, /reset, /step, /state, /tasks (basic).
 # We intentionally replace GET /tasks above so this enhanced handler owns /tasks.
-
 
 @app.get("/tasks")
 async def get_tasks_enhanced():
@@ -173,7 +172,7 @@ async def get_grader_score(
         baseline_error = _baseline_error
         cached_scores = _baseline_result if isinstance(_baseline_result, dict) else None
 
-    latest_snapshot = VppEnvironment.get_last_grader_snapshot()
+    latest_snapshot = VppEnvironment.get_last_grader_snapshot() if _EXPOSE_GRADER_SNAPSHOT else None
 
     response = {
         "status": "stateless-http",
@@ -185,9 +184,15 @@ async def get_grader_score(
         "weights": _PARETO_WEIGHTS,
         "baseline_refresh_running": baseline_running,
         "pareto_score_schema": ParetoScore.model_json_schema(),
-        "latest_client_grader_status": "available" if latest_snapshot is not None else "not-available",
-        "latest_client_grader_snapshot": latest_snapshot,
+        "latest_client_grader_status": (
+            "available"
+            if latest_snapshot is not None
+            else ("not-available" if _EXPOSE_GRADER_SNAPSHOT else "disabled")
+        ),
     }
+
+    if _EXPOSE_GRADER_SNAPSHOT:
+        response["latest_client_grader_snapshot"] = latest_snapshot
 
     if baseline_error:
         response["baseline_error"] = baseline_error
@@ -382,7 +387,13 @@ async def get_baseline(
                 )
             _baseline_running = True
             _baseline_error = None
-            _baseline_task = asyncio.create_task(_run_baseline_subprocess_async())
+            try:
+                _baseline_task = asyncio.create_task(_run_baseline_subprocess_async())
+            except Exception as e:
+                _baseline_running = False
+                _baseline_task = None
+                _baseline_error = f"Could not start baseline refresh task: {e}"
+                return JSONResponse(status_code=500, content={"error": _baseline_error})
         return JSONResponse(
             status_code=202,
             content={"status": "Baseline refresh started. Poll /baseline for results."},

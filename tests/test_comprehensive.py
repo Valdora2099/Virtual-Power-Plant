@@ -140,8 +140,37 @@ def test_hard_task_emergency_latency_is_observable():
 
     obs = env.step(_action(global_charge_rate=-1.0, min_reserve_pct=0.2))
 
-    assert obs.emergency_active is True
+    # Completed-step emergency flags live in metadata; top-level observation fields
+    # describe the returned post-step state.
+    metadata = obs.metadata or {}
+    assert metadata.get("emergency_active") is True
+    assert obs.emergency_active == ((obs.grid_frequency_hz < 49.8) or (not obs.grid_connected))
     assert obs.response_latency_steps_to_emergency >= 0
+
+
+def test_observation_emergency_fields_align_at_boundary_transition():
+    env = VppEnvironment()
+    obs = env.reset(seed=123, task_id="hard-frequency-response")
+
+    # Step to just before the hard-task emergency onset (step 26).
+    for _ in range(25):
+        obs = env.step(_action(global_charge_rate=0.0, min_reserve_pct=0.2))
+
+    # This step completes state transition into the emergency-index observation.
+    obs = env.step(_action(global_charge_rate=0.0, min_reserve_pct=0.2))
+
+    assert obs.step_id == 26
+    assert obs.grid_frequency_hz < 49.8
+    assert obs.emergency_active is True
+    assert obs.emergency_active == ((obs.grid_frequency_hz < 49.8) or (not obs.grid_connected))
+
+    # Trend must include the current observation frequency as its newest value.
+    assert obs.grid_frequency_trend_hz
+    assert obs.grid_frequency_trend_hz[-1] == pytest.approx(round(obs.grid_frequency_hz, 3), abs=1e-9)
+
+    # Metadata remains completed-step semantics (the step that produced this observation).
+    metadata = obs.metadata or {}
+    assert metadata.get("emergency_active") is False
 
 
 def test_dr_penalty_escalates_across_consecutive_failed_windows():

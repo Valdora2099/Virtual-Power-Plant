@@ -192,7 +192,7 @@ Key new signals:
 
 ## Pareto Grader
 
-```
+```text
 eps              = 1e-4
 profit_score     = clip(total_profit / profit_target, eps, 1 - eps)
 
@@ -308,7 +308,7 @@ A battery cycled at full rate every step degrades ~0.12% over a 12-hour episode.
 
 ## Carbon Credits Physics
 
-```
+```text
 earned per step = solar_kw × 0.25 h × 0.05 credits/kWh × 100 homes
 spent per step  = grid_charge_kw × 0.25 h × 0.08 credits/kWh × 100 homes
                    (only during steps 0–16, the high-emission morning window)
