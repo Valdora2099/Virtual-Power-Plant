@@ -50,8 +50,12 @@ class VppEnv(EnvClient[VppAction, VppObservation, VppState]):
         obs_data = payload.get("observation", {})
         metadata = obs_data.get("metadata") or payload.get("metadata") or payload.get("info") or {}
         pareto_score = obs_data.get("pareto_score")
+        if isinstance(pareto_score, (tuple, list)) and len(pareto_score) == 1:
+            pareto_score = pareto_score[0]
         if not isinstance(pareto_score, dict):
             md_pareto = metadata.get("pareto_score") if isinstance(metadata, dict) else None
+            if isinstance(md_pareto, (tuple, list)) and len(md_pareto) == 1:
+                md_pareto = md_pareto[0]
             pareto_score = md_pareto if isinstance(md_pareto, dict) else None
         telemetry = [BatteryTelemetry(**t) for t in obs_data.get("telemetry", [])]
         zone_aggregates = [ZoneTelemetry(**z) for z in obs_data.get("zone_aggregates", [])]

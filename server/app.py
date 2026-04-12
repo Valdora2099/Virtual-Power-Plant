@@ -198,8 +198,8 @@ async def get_grader_score(
         "status": "stateless-http",
         "message": (
             "No active HTTP episode state is available for /grader. "
-            "Use VppEnv WebSocket sessions and consume metadata.pareto_score "
-            "from each observation."
+            "Use VppEnv WebSocket sessions and consume observation.pareto_score "
+            "from each observation (fallback: metadata.pareto_score)."
         ),
         "weights": _PARETO_WEIGHTS,
         "baseline_refresh_running": baseline_running,

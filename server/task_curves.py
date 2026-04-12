@@ -173,7 +173,7 @@ def forecast_solar_curve(task_id: str) -> np.ndarray:
     storm drop, creating a real forecast-vs-reality mismatch.
     """
     tier = _tier(task_id)
-    if tier != "medium":
+    if tier not in {"medium", "expert"}:
         return solar_curve(task_id)
 
     steps = np.arange(EPISODE_STEPS)

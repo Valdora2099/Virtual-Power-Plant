@@ -47,7 +47,7 @@ P2P trading
 import random
 import threading
 from copy import deepcopy
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 import numpy as np
@@ -175,7 +175,7 @@ class VppEnvironment(Environment):
         self._battery_cycles: Dict[str, float] = {}  # cumulative equivalent cycles
         self._current_step:  int              = 0
         self._total_profit:  float            = 0.0
-        self._episode_start: datetime         = datetime.now(UTC)
+        self._episode_start: datetime         = datetime.now(timezone.utc)
 
         self._true_solar:     np.ndarray | None = None
         self._true_demand:    np.ndarray | None = None
@@ -257,7 +257,7 @@ class VppEnvironment(Environment):
 
         self._current_step  = 0
         self._total_profit  = 0.0
-        self._episode_start = datetime.now(UTC)
+        self._episode_start = datetime.now(timezone.utc)
         self._p2p_last_revenue = 0.0
         self._carbon_balance = 0.0
         self._carbon_earned  = 0.0
@@ -777,7 +777,7 @@ class VppEnvironment(Environment):
         pareto_score = self._get_pareto_score().model_dump()
         self._set_last_grader_snapshot(
             {
-                "updated_at_utc": datetime.now(UTC).isoformat(),
+                "updated_at_utc": datetime.now(timezone.utc).isoformat(),
                 "task_id": self._task_id,
                 "episode_id": self._state.episode_id,
                 "step_id": self._state.current_step,
