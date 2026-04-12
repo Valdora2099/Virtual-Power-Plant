@@ -365,6 +365,29 @@ async def _run_baseline_subprocess_async() -> None:
             _baseline_task = None
 
 
+def _terminate_baseline_process(proc: Optional[subprocess.Popen]) -> None:
+    """Terminate baseline subprocess handle best-effort."""
+    if proc is None or proc.poll() is not None:
+        return
+
+    try:
+        proc.terminate()
+    except OSError:
+        pass
+
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        try:
+            proc.kill()
+        except OSError:
+            pass
+        try:
+            proc.wait(timeout=5)
+        except Exception:
+            pass
+
+
 async def _cancel_baseline_task_if_running() -> None:
     """Cancel and await any in-flight baseline background task."""
     global _baseline_task, _baseline_proc, _baseline_running
@@ -379,22 +402,7 @@ async def _cancel_baseline_task_if_running() -> None:
     if task_to_cancel is not None:
         task_to_cancel.cancel()
 
-    if proc_to_cancel is not None and proc_to_cancel.poll() is None:
-        try:
-            proc_to_cancel.terminate()
-        except OSError:
-            pass
-        try:
-            proc_to_cancel.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            try:
-                proc_to_cancel.kill()
-            except OSError:
-                pass
-            try:
-                proc_to_cancel.wait(timeout=5)
-            except Exception:
-                pass
+    _terminate_baseline_process(proc_to_cancel)
 
     if task_to_cancel is not None:
         try:
@@ -402,10 +410,20 @@ async def _cancel_baseline_task_if_running() -> None:
         except asyncio.CancelledError:
             pass
 
+    # Re-check for a subprocess handle that may have been published after snapshot.
+    late_proc_to_cancel: Optional[subprocess.Popen] = None
+    with _baseline_lock:
+        if _baseline_proc is not None and _baseline_proc is not proc_to_cancel:
+            late_proc_to_cancel = _baseline_proc
+
+    _terminate_baseline_process(late_proc_to_cancel)
+
     with _baseline_lock:
         if _baseline_task is task_to_cancel:
             _baseline_task = None
-        if _baseline_proc is proc_to_cancel:
+        if _baseline_proc in {proc_to_cancel, late_proc_to_cancel}:
+            _baseline_proc = None
+        elif _baseline_proc is not None and _baseline_proc.poll() is not None:
             _baseline_proc = None
         if _baseline_task is None and _baseline_proc is None:
             _baseline_running = False
@@ -473,6 +491,7 @@ async def get_baseline(
     baseline_path = _baseline_scores_path()
     fallback_path = _fallback_baseline_scores_path()
     primary_decode_error: Optional[json.JSONDecodeError] = None
+    primary_load_error: Optional[OSError] = None
 
     try:
         with open(baseline_path, "r", encoding="utf-8") as f:
@@ -482,8 +501,8 @@ async def get_baseline(
         return scores
     except json.JSONDecodeError as e:
         primary_decode_error = e
-    except FileNotFoundError:
-        pass
+    except (FileNotFoundError, OSError) as e:
+        primary_load_error = e
 
     if fallback_path != baseline_path and os.path.exists(fallback_path):
         try:
@@ -505,6 +524,9 @@ async def get_baseline(
 
     if primary_decode_error is not None:
         raise HTTPException(status_code=500, detail=f"Invalid baseline score file: {primary_decode_error}") from primary_decode_error
+
+    if primary_load_error is not None and not isinstance(primary_load_error, FileNotFoundError):
+        raise HTTPException(status_code=500, detail=f"Could not read baseline score file: {primary_load_error}") from primary_load_error
 
     empty = {tid: {"aggregate_score": 0.0, "note": "Run baseline_inference.py"} for tid in ALL_TASK_IDS}
     return empty
